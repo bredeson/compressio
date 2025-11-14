@@ -19,12 +19,17 @@ CAT = shutil.which('cat') or '/bin/cat' or 'cat'
 _PYTHON_VERSION = sys.version_info[:2]
 
 if _PYTHON_VERSION < (3, 3):
-    import bz2file as bz2  # type: ignore
+    try:
+        import bz2file as bz2  # type: ignore
+    except ImportError:
+        import bz2
 else:
     import bz2
 
 try:
-    import bgzip  # optional; tests using bgzip will be skipped if missing
+    # optional; tests using bgzip will be skipped if missing
+    # import may fail if pysam is not installed
+    import bgzip
 except Exception:
     bgzip = None
 

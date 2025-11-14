@@ -45,7 +45,7 @@ COMPRESSION_INSTALL_TARGETS = $(patsubst $(SRC_DIR)/%,$(INSTALL_PATH)/%,$(COMPRE
 .SUFFIXES:
 .SUFFIXES: .py
 
-.PHONY: install activate test clean 
+.PHONY: install activate test clean
 
 all: build
 
@@ -67,7 +67,7 @@ $(LIB_DIR)/%: $(SRC_DIR)/%
 
 
 test: $(COMPRESSION_BUILD_TARGETS)
-	cd $(TEST_DIR) && PYTHONPATH="$(CURR_DIR)/$(LIB_DIR)" $(PYTHON) -m unittest discover -v 
+	PYTHONPATH="$(CURR_DIR)/$(LIB_DIR)" $(PYTHON) -m unittest discover -v $(TEST_DIR)
 
 
 

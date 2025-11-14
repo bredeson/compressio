@@ -1,8 +1,37 @@
+
 import unittest
-from compression.filenames import split_suffix, strip_suffix, infer_compression_format
+import compression
+
+from compression.filenames import split_suffix, strip_suffix, infer_compression_format_by_suffix
 from compression.constants import COMPRESSION_SUFFIX
 
+
+
 class TestFilenames(unittest.TestCase):
+    def test_split_suffix_file_txt(self):
+        filename = 'file.txt'
+        base, suffix = split_suffix(filename)
+        self.assertEqual(base, 'file')
+        self.assertEqual(suffix, 'txt')
+
+    def test_split_suffix_file_none(self):
+        filename = 'file'
+        base, suffix = split_suffix(filename)
+        self.assertEqual(base, filename)
+        self.assertIsNone(suffix)
+
+    def test_split_suffix_path_txt(self):
+        filename = 'path/to.my/file.txt'
+        base, suffix = split_suffix(filename)
+        self.assertEqual(base, 'path/to.my/file')
+        self.assertEqual(suffix, 'txt')
+
+    def test_split_suffix_path_none(self):
+        filename = 'path/to.my/file'
+        base, suffix = split_suffix(filename)
+        self.assertEqual(base, filename)
+        self.assertIsNone(suffix)
+
     def test_split_suffix_found(self):
         # Use known suffixes from COMPRESSION_SUFFIX
         filename = 'file.txt.gz'
@@ -37,23 +66,31 @@ class TestFilenames(unittest.TestCase):
         stripped = strip_suffix(filename, suffixes)
         self.assertEqual(stripped, 'file.txt')
 
-    def test_infer_compression_format_string(self):
+    def test_infer_compression_format_by_suffix_string(self):
         for fmt, suffixes in COMPRESSION_SUFFIX.items():
+            if fmt == 'bgzip':
+                compression.set_preferred_gz_api('bgzip')
+            else:
+                compression.set_preferred_gz_api('gzip')
             for suf in suffixes:
-                fname = f'test{suf}'
-                self.assertEqual(infer_compression_format(fname), fmt)
+                fname = 'test' + suf
+                self.assertEqual(infer_compression_format_by_suffix(fname), fmt)
 
-    def test_infer_compression_format_bytes(self):
+    def test_infer_compression_format_by_suffix_bytes(self):
         for fmt, suffixes in COMPRESSION_SUFFIX.items():
+            if fmt == 'bgzip':
+                compression.set_preferred_gz_api('bgzip')
+            else:
+                compression.set_preferred_gz_api('gzip')
             for suf in suffixes:
-                fname = f'test{suf}'.encode()
-                self.assertEqual(infer_compression_format(fname), fmt)
+                fname = ('test' + suf).encode()
+                self.assertEqual(infer_compression_format_by_suffix(fname), fmt)
 
-    def test_infer_compression_format_none_string(self):
-        self.assertIsNone(infer_compression_format('file.txt'))
+    def test_infer_compression_format_by_suffix_none_string(self):
+        self.assertIsNone(infer_compression_format_by_suffix('file.txt'))
 
-    def test_infer_compression_format_none_bytes(self):
-        self.assertIsNone(infer_compression_format(b'file.txt'))
+    def test_infer_compression_format_by_suffix_none_bytes(self):
+        self.assertIsNone(infer_compression_format_by_suffix(b'file.txt'))
 
 
 if __name__ == '__main__':

@@ -7,14 +7,28 @@ import sys
 import locale
 import warnings
 
-__all__ = ('open','is_stream','STDIO')
+__all__ = ('open','STDIO')
 
 from os.path import expanduser
 from urllib.parse import urlparse
 from urllib.request import urlopen
-from .constants import _PYTHON_VERSION
-from .constants import STDIO, COMPRESSION_NAME_MAP
-from .filenames import infer_compression_format
+from .filenames import infer_compression_format_by_suffix
+from .constants import (
+    get_preferred_gz_api,
+    set_preferred_gz_api
+)
+from .constants import (
+    _PYTHON_VERSION, 
+    COMPRESSION_NAME_MAP,
+    STDIO,
+    BZIP2_MAGIC_NUMBER,
+    BGZF_MAGIC_NUMBER, 
+    COMPRESS_MAGIC_NUMBER, 
+    GZIP_MAGIC_NUMBER, 
+    XZ_MAGIC_NUMBER,
+    ZIP_MAGIC_NUMBER, 
+    ZSTD_MAGIC_NUMBER,
+)
 
 # NOTES:
 # - the compression modules (gzip, lzma, bz2file) accept file-like inputs,
@@ -37,6 +51,34 @@ def infer_encoding(encoding=None):
 
 
 
+def infer_compression_format_by_magic_number(filename):
+    with open(filename, 'rb') as fileobj:
+        file_contents = fileobj.read(2)  # read first 2 bytes
+        if file_contents.startswith(GZIP_MAGIC_NUMBER):
+            file_contents += fileobj.read(2)
+            if file_contents.startswith(BGZF_MAGIC_NUMBER):
+                return 'bgzip'
+            return 'gzip'
+        elif file_contents.startswith(COMPRESS_MAGIC_NUMBER):
+            raise NotImplementedError("compress/decompress format")
+ 
+        file_contents += fileobj.read(1)  # append third byte
+        if file_contents.startswith(BZIP2_MAGIC_NUMBER):
+            return 'bzip2'
+ 
+        file_contents += fileobj.read(1)  # append fourth byte
+        if file_contents.startswith(ZSTD_MAGIC_NUMBER):
+            return 'zstd'
+        elif file_contents.startswith(ZIP_MAGIC_NUMBER):
+            return 'zip'
+
+        file_contents += fileobj.read(2)  # append fifth and sixth bytes
+        if file_contents.startswith(XZ_MAGIC_NUMBER):
+            return 'lzma'
+    return None
+
+
+
 def import_compression_module(module):
     if type(module) == "module":
         # already loaded, pass-through
@@ -47,28 +89,48 @@ def import_compression_module(module):
         module = module.lower()
         if module in COMPRESSION_NAME_MAP:
             if COMPRESSION_NAME_MAP[module] == 'bgzip':
-                import bgzip as module_object
-            elif COMPRESSION_NAME_MAP[module] == 'gzip':
-                import gzip as module_object
+                try:
+                    import bgzip as module_object
+                except ImportError:
+                    warnings.warn(
+                        "bgzip module not found, falling back to gzip"
+                    )
+                    # import gzip as module_object
+                    return import_compression_module('gzip')
+                
             elif COMPRESSION_NAME_MAP[module] == 'bzip2':
                 if _PYTHON_VERSION < (3,3):
                     # stdlib bz2 module did not support multistream
                     # prior to python 3.3; bz2file NOT in python stdlib
-                    import bz2file as module_object
+                    try:
+                        import bz2file as module_object
+                    except ImportError:
+                        warnings.warn(
+                            "bz2file module not found, falling back to bz2 "
+                            "(multistream may not be supported)"
+                        )
+                        import bz2 as module_object
                 else:
                     import bz2 as module_object
-            elif COMPRESSION_NAME_MAP[module] == 'lzma':
-                import lzma as module_object
+
+            elif COMPRESSION_NAME_MAP[module] == 'zip':
+                # use the package-local zipfile shunt implemented in
+                # compression/zipfile.py so the package can open a member
+                # inside a .zip archive transparently.
+                from . import zipfile as module_object
             else:
-                raise AssertionError("Should not be possible")
-        elif module == 'io':
-            import io as module_object
+                try:
+                    module_object = __import__(COMPRESSION_NAME_MAP[module])
+                except ImportError:
+                    raise ValueError(
+                        "Unsupported format: %r" % module
+                    )
         else:
             try:
                 module_object = __import__(module)
             except ImportError:
                 raise ValueError(
-                    "Unsupported compression format: %r" % module
+                    "Unsupported format: %r" % module
                 )
     return module_object
 
@@ -107,7 +169,7 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
 
     See Also: help(io.open)
     """
-    compressformat = infer_compression_format(filename)
+    compressformat = infer_compression_format_by_suffix(filename)
     encoding = infer_encoding(encoding)
 
     if compression:
@@ -169,7 +231,7 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
     if is_stream(filename):
         # bgzip does not permit input streams...
         if hasattr(filename, 'buffer'):
-            # To use an compression() with our input/output stream,
+            # To use a compression() with our input/output stream,
             # use stream.buffer, as std streams decode bytes
             # to str under the hood automatically:
             # https://stackoverflow.com/questions/53245314/python-read-gzip-from-stdin
@@ -217,5 +279,6 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
     return compression.open(filename, **options)
 
 
-#TODO: add zlib (https://docs.python.org/3/library/zlib.html) support
+# zstd (https://docs.python.org/3/library/compression.zstd.html)
+# zlib (https://docs.python.org/3/library/zlib.html)
 #TODO: add zipfile (https://docs.python.org/3/library/zipfile.html) support
