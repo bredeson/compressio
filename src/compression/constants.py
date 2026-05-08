@@ -11,7 +11,6 @@ COMPRESSION_SUFFIX = {
     'bzip2' : ('.bzip2','.bz2','.bz'),
     'gzip'  : ('.gzip','.gz','-gz','.z','-z','_z'),
     'lzma'  : ('.lzma','.lz','.xz'),
-    'zip'   : ('.zip',),
     'zstd'  : ('.zst',),
 }
 
@@ -26,7 +25,6 @@ COMPRESSION_NAME_MAP = {
     'bgzip'   : 'bgzip',
     'bgzf'    : 'bgzip',
     'bgz'     : 'bgzip',
-    'zip'     : 'zip',    
     'zstd'    : 'zstd',
     'zst'     : 'zstd',
 }

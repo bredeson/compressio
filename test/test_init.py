@@ -33,6 +33,13 @@ try:
 except Exception:
     bgzip = None
 
+if sys.version_info < (3, 14):
+    from backports import zstd
+else:
+    from compression import zstd
+
+    
+
 from compression import open, STDIO
 from compression import is_stream, infer_encoding
 # Additional unit tests for is_stream() and infer_encoding()
@@ -127,6 +134,16 @@ class CompressionTests(unittest.TestCase):
         self._write_file(fn, "xz")
         self.assertEqual(self._read_first_line(fn, "xz"), BEDLINE)
 
+    def test_0_caller_zstd_bare(self):
+        fn = "test.caller.zstd-bare.bed"
+        self._write_file(fn, zstd)
+        self.assertEqual(self._read_first_line(fn, zstd), BEDLINE)
+
+    def test_0_caller_zstd_str(self):
+        fn = "test.caller.zstd-str.bed"
+        self._write_file(fn, "zstd")
+        self.assertEqual(self._read_first_line(fn, "zstd"), BEDLINE)
+
     @unittest.skipIf(bgzip is None,"bgzip module not available")
     def test_0_caller_bgzip_bare(self):
         fn = "test.caller.bgzip-bare.bed"
@@ -210,8 +227,29 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, "xz"), BEDLINE)
 
+    def test_1_stream_zstd_bare(self):
+        fn = "test.stream.zstd-bare.bed"
+        with open(fn, mode="w", compression=zstd) as o:
+            print(BEDLINE, file=o)
+        self.files.append(fn)
+        self.assertEqual(self._read_first_line(fn, zstd), BEDLINE)
+
+    def test_1_stream_zstd_str(self):
+        fn = "test.stream.zstd-str.bed"
+        with open(fn, mode="w", compression="zstd") as o:
+            print(BEDLINE, file=o)
+        self.files.append(fn)
+        self.assertEqual(self._read_first_line(fn, "zstd"), BEDLINE)
+
+    def test_1_stream_lzma_str(self):
+        fn = "test.stream.lzma-str.bed"
+        with open(fn, mode="w", compression="lzma") as o:
+            print(BEDLINE, file=o)
+        self.files.append(fn)
+        self.assertEqual(self._read_first_line(fn, "lzma"), BEDLINE)
+
     @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_0_stream_bgzip_bare(self):
+    def test_1_stream_bgzip_bare(self):
         fn = "test.stream.bgzip-bare.bed"
         with open(fn, mode="w", compression=bgzip) as o:
             print(BEDLINE, file=o)
@@ -219,7 +257,7 @@ class CompressionTests(unittest.TestCase):
         self.assertEqual(self._read_first_line(fn, bgzip), BEDLINE)
 
     @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_0_stream_bgzip_str(self):
+    def test_1_stream_bgzip_str(self):
         fn = "test.stream.bgzip-str.bed"
         with open(fn, mode="w", compression="bgzip") as o:
             print(BEDLINE, file=o)

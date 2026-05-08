@@ -31,6 +31,8 @@ from .constants import (
 )
 
 # NOTES:
+# - See: https://docs.python.org/3/library/archiving.html for algorithm details
+#
 # - the compression modules (gzip, lzma, bz2file) accept file-like inputs,
 #   even _io.TextIOWrapper objects for opening
 #
@@ -118,6 +120,11 @@ def import_compression_module(module):
                 # compression/zipfile.py so the package can open a member
                 # inside a .zip archive transparently.
                 from . import zipfile as module_object
+            elif COMPRESSION_NAME_MAP[module] == 'zstd':
+                if _PYTHON_VERSION < (3,14):
+                    from backports import zstd as module_object
+                else:
+                    from compression import zstd as module_object
             else:
                 try:
                     module_object = __import__(COMPRESSION_NAME_MAP[module])
@@ -140,17 +147,17 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
     """Open a gzip-/bgzip-/bzip2-/lzma-/xz-compressed file or uncompressed file
     in binary or text mode.
 
-    The filename argument can be an actual filename (a str or bytes object), 
+    The `filename` argument can be an actual filename (a str or bytes object), 
     or an existing file object to read from or write to. Use "-" to open a file
-    object to the appropriate stdin/stdout stream requested via mode. Serial
+    object to the appropriate stdin/stdout stream requested via `mode`. Serial
     reading via HTTP and FTP URL file path is supported, but writing is not.
 
-    The mode argument can be "r", "rb", "w", "wb", "x", "xb", "a" or "ab" for
+    The `mode` argument can be "r", "rb", "w", "wb", "x", "xb", "a" or "ab" for
     binary mode, or "rt", "wt", "xt" or "at" for text mode. The default mode is
-    "rt". The default compresslevel for compression streams is 9.
+    "rt". The default `compresslevel` for compression streams is 9.
 
-    For binary mode, the encoding, errors, and newline arguments must not be
-    provided.
+    For binary mode, the `encoding`, `errors`, and `newline` arguments must not
+    be provided.
 
     For text mode, a compressed stream object is created, then wrapped in an
     io.TextIOWrapper instance with the specified encoding, error handling
@@ -158,26 +165,28 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
 
     To read from/write to compressed streams from stdin/stdout or existing
     file-like objects, the appropriate compression module name or object must
-    be passed via the compression attribute (e.g., compression='gzip' or 
-    compression=gzip). When writing, compresslevel must be set to a value 
+    be passed via the `compression` agrument (e.g., compression='gzip' or 
+    compression=gzip). When writing, `compresslevel` must be set to a value 
     between 1 and 9, inclusive (default is 9).
 
-    This module relies on the io, gzip, lzma, bz2 (or bz2file), and pysam 
-    modules internally, but others can be supplied via the compression 
-    attribute, which must return an object with a callable open() attribute.
-    The bz2file module is only required for Python versions earlier than 3.3.
-
+    This module relies on the `io`, `gzip`, `lzma`, `bz2` (or `bz2file`),
+    `pysam` and `zstd` modules internally, but others can be supplied via the
+    `compression` argument, which must return an object with a callable `open()`
+    attribute. The `bz2file` module is only required for Python versions earlier
+    than 3.3. The `zstd` module is available via the `backports` module prior to
+    Python 3.14 and the `compression` module thereafter.
+    
     See Also: help(io.open)
     """
     compressformat = infer_compression_format_by_suffix(filename)
     encoding = infer_encoding(encoding)
-
+    
     if compression:
         if isinstance(compression, (str, bytes)):
             compressformat = compression
             compression = import_compression_module(compressformat)
         else:
-            compressformat = compression.__name__
+            compressformat = compression.__name__.split('.')[-1]
     elif compressformat:
         compression = import_compression_module(compressformat)
 
@@ -222,6 +231,8 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
         if compressformat == 'xz' or \
            compressformat == 'lzma':
             options['preset'] = compresslevel
+        elif compressformat == 'zstd':
+            options['level'] = compresslevel
         else:
             options['compresslevel'] = compresslevel
     elif not binmode:
@@ -275,10 +286,9 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
     options['mode'] = mode
     if not compression:
         compression = io
-        
+
     return compression.open(filename, **options)
 
 
-# zstd (https://docs.python.org/3/library/compression.zstd.html)
-# zlib (https://docs.python.org/3/library/zlib.html)
 #TODO: add zipfile (https://docs.python.org/3/library/zipfile.html) support
+#TODO: bgzip reader raises UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-10: invalid continuation byte
