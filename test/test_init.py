@@ -3,8 +3,6 @@
 import os
 import sys
 import io
-import gzip
-import lzma
 import locale
 import unittest
 import subprocess
@@ -23,8 +21,22 @@ if _PYTHON_VERSION < (3, 3):
         import bz2file as bz2  # type: ignore
     except ImportError:
         import bz2
-else:
+elif _PYTHON_VERSION < (3, 14):
     import bz2
+else:
+    from compression import bz2
+    
+if sys.version_info < (3, 14):
+    import gzip
+    import lzma
+    try:
+        from backports import zstd
+    except ImportError:
+        zstd = None
+else:
+    from compression import gzip
+    from compression import lzma
+    from compression import zstd
 
 try:
     # optional; tests using bgzip will be skipped if missing
@@ -32,16 +44,10 @@ try:
     import bgzip
 except Exception:
     bgzip = None
-
-if sys.version_info < (3, 14):
-    from backports import zstd
-else:
-    from compression import zstd
-
     
 
-from compression import open, STDIO
-from compression import is_stream, infer_encoding
+from compressio import open, STDIO
+from compressio import is_stream, infer_encoding
 # Additional unit tests for is_stream() and infer_encoding()
 
 BEDLINE = "chr\t0\t1"
@@ -67,9 +73,17 @@ class CompressionTests(unittest.TestCase):
         with open(filename, mode="r", compression=compression_arg) as i:
             return next(i).strip()
 
+    # ========================================
     # Caller tests (explicit)
+    # ========================================
+    
     def test_0_caller_none_bed(self):
         fn = "test.caller.none.bed"
+        self._write_file(fn, None)
+        self.assertEqual(self._read_first_line(fn, None), BEDLINE)
+
+    def test_0_caller_none_bed_bz2(self):
+        fn = "test.caller.none.bed.bz2"
         self._write_file(fn, None)
         self.assertEqual(self._read_first_line(fn, None), BEDLINE)
 
@@ -78,26 +92,33 @@ class CompressionTests(unittest.TestCase):
         # force gzip (avoid importing bgzip/pysam in test environment)
         self._write_file(fn, "gzip")
         self.assertEqual(self._read_first_line(fn, "gzip"), BEDLINE)
-
-    def test_0_caller_none_bed_bz2(self):
-        fn = "test.caller.none.bed.bz2"
-        self._write_file(fn, None)
-        self.assertEqual(self._read_first_line(fn, None), BEDLINE)
-
+        
     def test_0_caller_none_bed_xz(self):
         fn = "test.caller.none.bed.xz"
         self._write_file(fn, None)
         self.assertEqual(self._read_first_line(fn, None), BEDLINE)
 
-    def test_0_caller_io_bare(self):
-        fn = "test.caller.io-bare.bed"
-        self._write_file(fn, io)
-        self.assertEqual(self._read_first_line(fn, io), BEDLINE)
+    @unittest.skipIf(bgzip is None,"bgzip module not available")
+    def test_0_caller_bgzip_bare(self):
+        fn = "test.caller.bgzip-bare.bed"
+        self._write_file(fn, bgzip)
+        self.assertEqual(self._read_first_line(fn, bgzip), BEDLINE)
+    
+    @unittest.skipIf(bgzip is None,"bgzip module not available")
+    def test_0_caller_bgzip_str(self):
+        fn = "test.caller.bgzip-str.bed"
+        self._write_file(fn, "bgzip")
+        self.assertEqual(self._read_first_line(fn, "bgzip"), BEDLINE)
+        
+    def test_0_caller_bzip2_bare(self):
+        fn = "test.caller.bzip2-bare.bed"
+        self._write_file(fn, bz2)
+        self.assertEqual(self._read_first_line(fn, bz2), BEDLINE)
 
-    def test_0_caller_io_str(self):
-        fn = "test.caller.io-str.bed"
-        self._write_file(fn, "io")
-        self.assertEqual(self._read_first_line(fn, "io"), BEDLINE)
+    def test_0_caller_bzip2_str(self):
+        fn = "test.caller.bzip2-str.bed"
+        self._write_file(fn, "bz2")
+        self.assertEqual(self._read_first_line(fn, "bz2"), BEDLINE)
 
     def test_0_caller_gzip_bare(self):
         fn = "test.caller.gzip-bare.bed"
@@ -109,16 +130,16 @@ class CompressionTests(unittest.TestCase):
         self._write_file(fn, "gzip")
         self.assertEqual(self._read_first_line(fn, "gzip"), BEDLINE)
 
-    def test_0_caller_bzip2_bare(self):
-        fn = "test.caller.bzip2-bare.bed"
-        self._write_file(fn, bz2)
-        self.assertEqual(self._read_first_line(fn, bz2), BEDLINE)
+    def test_0_caller_io_bare(self):
+        fn = "test.caller.io-bare.bed"
+        self._write_file(fn, io)
+        self.assertEqual(self._read_first_line(fn, io), BEDLINE)
 
-    def test_0_caller_bzip2_str(self):
-        fn = "test.caller.bzip2-str.bed"
-        self._write_file(fn, "bz2")
-        self.assertEqual(self._read_first_line(fn, "bz2"), BEDLINE)
-
+    def test_0_caller_io_str(self):
+        fn = "test.caller.io-str.bed"
+        self._write_file(fn, "io")
+        self.assertEqual(self._read_first_line(fn, "io"), BEDLINE)
+        
     def test_0_caller_lzma_bare(self):
         fn = "test.caller.lzma-bare.bed"
         self._write_file(fn, lzma)
@@ -134,29 +155,22 @@ class CompressionTests(unittest.TestCase):
         self._write_file(fn, "xz")
         self.assertEqual(self._read_first_line(fn, "xz"), BEDLINE)
 
+    @unittest.skipIf(zstd is None,"zstd module not available")
     def test_0_caller_zstd_bare(self):
         fn = "test.caller.zstd-bare.bed"
         self._write_file(fn, zstd)
         self.assertEqual(self._read_first_line(fn, zstd), BEDLINE)
 
+    @unittest.skipIf(zstd is None,"zstd module not available")
     def test_0_caller_zstd_str(self):
         fn = "test.caller.zstd-str.bed"
         self._write_file(fn, "zstd")
         self.assertEqual(self._read_first_line(fn, "zstd"), BEDLINE)
 
-    @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_0_caller_bgzip_bare(self):
-        fn = "test.caller.bgzip-bare.bed"
-        self._write_file(fn, bgzip)
-        self.assertEqual(self._read_first_line(fn, bgzip), BEDLINE)
-    
-    @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_0_caller_bgzip_str(self):
-        fn = "test.caller.bgzip-str.bed"
-        self._write_file(fn, "bgzip")
-        self.assertEqual(self._read_first_line(fn, "bgzip"), BEDLINE)
-
+    # ========================================
     # Stream tests (explicit)
+    # ========================================
+    
     def test_1_stream_none(self):
         fn = "test.stream.none.bed"
         with open(fn, mode="w", compression=None) as o:
@@ -164,19 +178,35 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, None), BEDLINE)
 
-    def test_1_stream_io_bare(self):
-        fn = "test.stream.io-bare.bed"
-        with open(fn, mode="w", compression=io) as o:
+    @unittest.skipIf(bgzip is None,"bgzip module not available")
+    def test_1_stream_bgzip_bare(self):
+        fn = "test.stream.bgzip-bare.bed"
+        with open(fn, mode="w", compression=bgzip) as o:
             print(BEDLINE, file=o)
         self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, io), BEDLINE)
+        self.assertEqual(self._read_first_line(fn, bgzip), BEDLINE)
 
-    def test_1_stream_io_str(self):
-        fn = "test.stream.io-str.bed"
-        with open(fn, mode="w", compression="io") as o:
+    @unittest.skipIf(bgzip is None,"bgzip module not available")
+    def test_1_stream_bgzip_str(self):
+        fn = "test.stream.bgzip-str.bed"
+        with open(fn, mode="w", compression="bgzip") as o:
             print(BEDLINE, file=o)
         self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, "io"), BEDLINE)
+        self.assertEqual(self._read_first_line(fn, "bgzip"), BEDLINE)
+        
+    def test_1_stream_bzip2_bare(self):
+        fn = "test.stream.bzip2-bare.bed"
+        with open(fn, mode="w", compression=bz2) as o:
+            print(BEDLINE, file=o)
+        self.files.append(fn)
+        self.assertEqual(self._read_first_line(fn, bz2), BEDLINE)
+
+    def test_1_stream_bzip2_str(self):
+        fn = "test.stream.bzip2-str.bed"
+        with open(fn, mode="w", compression="bz2") as o:
+            print(BEDLINE, file=o)
+        self.files.append(fn)
+        self.assertEqual(self._read_first_line(fn, "bz2"), BEDLINE)
 
     def test_1_stream_gzip_bare(self):
         fn = "test.stream.gzip-bare.bed"
@@ -192,19 +222,19 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, "gzip"), BEDLINE)
 
-    def test_1_stream_bzip2_bare(self):
-        fn = "test.stream.bzip2-bare.bed"
-        with open(fn, mode="w", compression=bz2) as o:
+    def test_1_stream_io_bare(self):
+        fn = "test.stream.io-bare.bed"
+        with open(fn, mode="w", compression=io) as o:
             print(BEDLINE, file=o)
         self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, bz2), BEDLINE)
+        self.assertEqual(self._read_first_line(fn, io), BEDLINE)
 
-    def test_1_stream_bzip2_str(self):
-        fn = "test.stream.bzip2-str.bed"
-        with open(fn, mode="w", compression="bz2") as o:
+    def test_1_stream_io_str(self):
+        fn = "test.stream.io-str.bed"
+        with open(fn, mode="w", compression="io") as o:
             print(BEDLINE, file=o)
         self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, "bz2"), BEDLINE)
+        self.assertEqual(self._read_first_line(fn, "io"), BEDLINE)
 
     def test_1_stream_lzma_bare(self):
         fn = "test.stream.lzma-bare.bed"
@@ -227,6 +257,7 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, "xz"), BEDLINE)
 
+    @unittest.skipIf(zstd is None,"zstd module not available")
     def test_1_stream_zstd_bare(self):
         fn = "test.stream.zstd-bare.bed"
         with open(fn, mode="w", compression=zstd) as o:
@@ -234,6 +265,7 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, zstd), BEDLINE)
 
+    @unittest.skipIf(zstd is None,"zstd module not available")
     def test_1_stream_zstd_str(self):
         fn = "test.stream.zstd-str.bed"
         with open(fn, mode="w", compression="zstd") as o:
@@ -241,30 +273,10 @@ class CompressionTests(unittest.TestCase):
         self.files.append(fn)
         self.assertEqual(self._read_first_line(fn, "zstd"), BEDLINE)
 
-    def test_1_stream_lzma_str(self):
-        fn = "test.stream.lzma-str.bed"
-        with open(fn, mode="w", compression="lzma") as o:
-            print(BEDLINE, file=o)
-        self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, "lzma"), BEDLINE)
-
-    @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_1_stream_bgzip_bare(self):
-        fn = "test.stream.bgzip-bare.bed"
-        with open(fn, mode="w", compression=bgzip) as o:
-            print(BEDLINE, file=o)
-        self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, bgzip), BEDLINE)
-
-    @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_1_stream_bgzip_str(self):
-        fn = "test.stream.bgzip-str.bed"
-        with open(fn, mode="w", compression="bgzip") as o:
-            print(BEDLINE, file=o)
-        self.files.append(fn)
-        self.assertEqual(self._read_first_line(fn, "bgzip"), BEDLINE)
-
+    # ========================================
     # URL tests (explicit) — skip on network errors
+    # ========================================
+    
     def test_2_url_none(self):
         url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.none.bed"
         try:
@@ -274,10 +286,17 @@ class CompressionTests(unittest.TestCase):
             self.skipTest("skipping URL test due to: {0}" % str(e))
         self.assertEqual(line, BEDLINE)
 
-    def test_2_url_io(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.io.bed"
+    @unittest.skipIf(bgzip is None,"bgzip module not available")
+    def test_2_url_bgzip(self):
+        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bgzip.bed.gz"
+        with open(url, mode="r", compression="bgzip") as i:
+            line = next(i).strip()
+        self.assertEqual(line, BEDLINE)
+        
+    def test_2_url_bzip2(self):
+        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bzip2.bed.bz2"
         try:
-            with open(url, mode="r", compression="io") as i:
+            with open(url, mode="r", compression="bz2") as i:
                 line = next(i).strip()
         except Exception as e:
             self.skipTest("skipping URL test due to: {0}" % str(e))
@@ -292,15 +311,15 @@ class CompressionTests(unittest.TestCase):
             self.skipTest("skipping URL test due to: {0}" % str(e))
         self.assertEqual(line, BEDLINE)
 
-    def test_2_url_bzip2(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bzip2.bed.bz2"
+    def test_2_url_io(self):
+        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.io.bed"
         try:
-            with open(url, mode="r", compression="bz2") as i:
+            with open(url, mode="r", compression="io") as i:
                 line = next(i).strip()
         except Exception as e:
             self.skipTest("skipping URL test due to: {0}" % str(e))
         self.assertEqual(line, BEDLINE)
-
+        
     def test_2_url_lzma(self):
         url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.lzma.bed.xz"
         try:
@@ -319,17 +338,24 @@ class CompressionTests(unittest.TestCase):
             self.skipTest("skipping URL test due to: {0}" % str(e))
         self.assertEqual(line, BEDLINE)
 
-    @unittest.skipIf(bgzip is None,"bgzip module not available")
-    def test_0_url_bgzip(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bgzip.bed.gz"
-        with open(url, mode="r", compression="bgzip") as i:
+    @unittest.skipIf(zstd is None,"zstd module not available")
+    def test_2_url_zstd(self):
+        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.zstd.bed.zst"
+        with open(url, mode="r", compression="zstd") as i:
             line = next(i).strip()
         self.assertEqual(line, BEDLINE)
 
+    # ========================================
     # STDIO write tests (explicit)
+    # ========================================
+    
     def test_3_stdio_write_none(self):
         script = "test.stdio.none.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=None) as o:\n    print("chr\\t0\\t1", file=o)\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=None) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
         out = "test.stdio.none.bed"
         with open(script, "w") as s:
             s.write(src)
@@ -337,100 +363,15 @@ class CompressionTests(unittest.TestCase):
         subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
         self.assertEqual(self._read_first_line(out, None), BEDLINE)
 
-    def test_3_stdio_write_io_bare(self):
-        script = "test.stdio.io-bare.py"
-        src = 'import io\nfrom compression import STDIO, open\nwith open(STDIO, mode="w", compression=io) as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.io-bare.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "io"), BEDLINE)
-
-    def test_3_stdio_write_io_str(self):
-        script = "test.stdio.io-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"io\") as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.io-str.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "io"), BEDLINE)
-
-    def test_3_stdio_write_gzip_bare(self):
-        script = "test.stdio.gzip-bare.py"
-        src = 'import gzip\nfrom compression import STDIO, open\nwith open(STDIO, mode="w", compression=gzip) as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.gzip-bare.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "gzip"), BEDLINE)
-
-    def test_3_stdio_write_gzip_str(self):
-        script = "test.stdio.gzip-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"gzip\") as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.gzip-str.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "gzip"), BEDLINE)
-
-    def test_3_stdio_write_bzip2_bare(self):
-        script = "test.stdio.bzip2-bare.py"
-        src = 'import bz2\nfrom compression import STDIO, open\nwith open(STDIO, mode="w", compression=bz2) as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.bzip2-bare.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "bz2"), BEDLINE)
-
-    def test_3_stdio_write_bzip2_str(self):
-        script = "test.stdio.bzip2-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"bz2\") as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.bzip2-str.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "bz2"), BEDLINE)
-
-    def test_3_stdio_write_lzma_bare(self):
-        script = "test.stdio.lzma-bare.py"
-        src = 'import lzma\nfrom compression import STDIO, open\nwith open(STDIO, mode="w", compression=lzma) as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.lzma-bare.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "lzma"), BEDLINE)
-
-    def test_3_stdio_write_lzma_str(self):
-        script = "test.stdio.lzma-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"lzma\") as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.lzma-str.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "lzma"), BEDLINE)
-
-    def test_3_stdio_write_xz_str(self):
-        script = "test.stdio.xz-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"xz\") as o:\n    print("chr\\t0\\t1", file=o)\n'
-        out = "test.stdio.xz-str.bed"
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.extend([script, out])
-        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
-        self.assertEqual(self._read_first_line(out, "xz"), BEDLINE)
-
     @unittest.skipIf(bgzip is None,"bgzip module not available")
     def test_3_stdio_write_bgzip_bare(self):
         script = "test.stdio.bgzip-bare.py"
-        src = 'import bgzip\nfrom compression import STDIO, open\nwith open(STDIO, mode="w", compression=bgzip) as o:\n    print("chr\\t0\\t1", file=o)\n'
+        src = (
+            'import bgzip\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=bgzip) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
         out = "test.stdio.bgzip-bare.bed"
         with open(script, "w") as s:
             s.write(src)
@@ -441,18 +382,210 @@ class CompressionTests(unittest.TestCase):
     @unittest.skipIf(bgzip is None,"bgzip module not available")
     def test_3_stdio_write_bgzip_str(self):
         script = "test.stdio.bgzip-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="w", compression=\"bgzip\") as o:\n    print("chr\\t0\\t1", file=o)\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"bgzip\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
         out = "test.stdio.bgzip-str.bed"
         with open(script, "w") as s:
             s.write(src)
         self.files.extend([script, out])
         subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
         self.assertEqual(self._read_first_line(out, "bgzip"), BEDLINE)
+        
+    def test_3_stdio_write_bzip2_bare(self):
+        script = "test.stdio.bzip2-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,3):\n'
+            '    import bz2file as bz2\n'
+            'elif sys.version_info[:2] < (3,14):\n'
+            '    import bz2\n'
+            'else:\n'
+            '    from compression import bz2\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=bz2) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.bzip2-bare.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "bz2"), BEDLINE)
 
+    def test_3_stdio_write_bzip2_str(self):
+        script = "test.stdio.bzip2-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"bz2\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.bzip2-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "bz2"), BEDLINE)
+        
+    def test_3_stdio_write_gzip_bare(self):
+        script = "test.stdio.gzip-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    import gzip\n'
+            'else:\n'
+            '    from compression import gzip\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=gzip) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.gzip-bare.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "gzip"), BEDLINE)
+
+    def test_3_stdio_write_gzip_str(self):
+        script = "test.stdio.gzip-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"gzip\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.gzip-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "gzip"), BEDLINE)
+
+    def test_3_stdio_write_io_bare(self):
+        script = "test.stdio.io-bare.py"
+        src = (
+            'import io\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=io) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.io-bare.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "io"), BEDLINE)
+
+    def test_3_stdio_write_io_str(self):
+        script = "test.stdio.io-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"io\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.io-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "io"), BEDLINE)
+
+    def test_3_stdio_write_lzma_bare(self):
+        script = "test.stdio.lzma-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    import lzma\n'
+	    'else:\n'
+            '    from compression import lzma\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=lzma) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.lzma-bare.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "lzma"), BEDLINE)
+
+    def test_3_stdio_write_lzma_str(self):
+        script = "test.stdio.lzma-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"lzma\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.lzma-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "lzma"), BEDLINE)
+
+    def test_3_stdio_write_xz_str(self):
+        script = "test.stdio.xz-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"xz\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.xz-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "xz"), BEDLINE)
+        
+    @unittest.skipIf(zstd is None,"zstd module not available")
+    def test_3_stdio_write_zstd_bare(self):
+        script = "test.stdio.zstd-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    from backports import zstd\n'
+	    'else:\n'
+            '    from compression import zstd\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=zstd) as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.zstd-bare.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "zstd"), BEDLINE)
+
+    @unittest.skipIf(zstd is None,"zstd module not available")        
+    def test_3_stdio_write_zstd_str(self):
+        script = "test.stdio.zstd-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="w", compression=\"zstd\") as o:\n'
+            '    print("chr\\t0\\t1", file=o)\n'
+        )
+        out = "test.stdio.zstd-str.bed"
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.extend([script, out])
+        subprocess.run("{PY3} {script} > {out}".format(PY3=PY3,script=script,out=out), shell=True, check=True)
+        self.assertEqual(self._read_first_line(out, "zstd"), BEDLINE)
+            
+
+    # ========================================
     # STDIO read tests (explicit)
+    # ========================================
+    
     def test_4_stdio_read_none(self):
         script = "test.stdio.none.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=None) as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=None) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -462,49 +595,21 @@ class CompressionTests(unittest.TestCase):
         # use absolute executable paths for robustness
         subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
 
-    def test_4_stdio_read_io_bare(self):
-        script = "test.stdio.io-bare.py"
-        src = 'import io\nfrom compression import STDIO, open\nwith open(STDIO, mode="r", compression=io) as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.append(script)
-        infile = "test.stdio.io-bare.bed"
-        self._write_file(infile, io)
-        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
-
-    def test_4_stdio_read_io_str(self):
-        script = "test.stdio.io-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=\"io\") as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.append(script)
-        infile = "test.stdio.io-str.bed"
-        self._write_file(infile, "io")
-        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
-
-    def test_4_stdio_read_gzip_bare(self):
-        script = "test.stdio.gzip-bare.py"
-        src = 'import gzip\nfrom compression import STDIO, open\nwith open(STDIO, mode="r", compression=gzip) as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.append(script)
-        infile = "test.stdio.gzip-bare.bed"
-        self._write_file(infile, gzip)
-        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
-
-    def test_4_stdio_read_gzip_str(self):
-        script = "test.stdio.gzip-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=\"gzip\") as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
-        with open(script, "w") as s:
-            s.write(src)
-        self.files.append(script)
-        infile = "test.stdio.gzip-str.bed"
-        self._write_file(infile, "gzip")
-        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
-
     def test_4_stdio_read_bzip2_bare(self):
         script = "test.stdio.bzip2-bare.py"
-        src = 'import bz2\nfrom compression import STDIO, open\nwith open(STDIO, mode="r", compression=bz2) as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,3):\n'
+            '    import bz2file as bz2\n'
+            'elif sys.version_info[:2] < (3,14):\n'
+            '    import bz2\n'
+            'else:\n'
+            '    from compression import bz2\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=bz2) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -514,7 +619,12 @@ class CompressionTests(unittest.TestCase):
 
     def test_4_stdio_read_bzip2_str(self):
         script = "test.stdio.bzip2-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=\"bz2\") as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"bz2\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -522,9 +632,85 @@ class CompressionTests(unittest.TestCase):
         self._write_file(infile, "bz2")
         subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
 
+    def test_4_stdio_read_gzip_bare(self):
+        script = "test.stdio.gzip-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    import gzip\n'
+            'else:\n'
+            '    from compression import gzip\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=gzip) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.gzip-bare.bed"
+        self._write_file(infile, gzip)
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+
+    def test_4_stdio_read_gzip_str(self):
+        script = "test.stdio.gzip-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"gzip\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.gzip-str.bed"
+        self._write_file(infile, "gzip")
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+
+    def test_4_stdio_read_io_bare(self):
+        script = "test.stdio.io-bare.py"
+        src = (
+            'import io\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=io) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.io-bare.bed"
+        self._write_file(infile, io)
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+
+    def test_4_stdio_read_io_str(self):
+        script = "test.stdio.io-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"io\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.io-str.bed"
+        self._write_file(infile, "io")
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+
     def test_4_stdio_read_lzma_bare(self):
         script = "test.stdio.lzma-bare.py"
-        src = 'import lzma\nfrom compression import STDIO, open\nwith open(STDIO, mode="r", compression=lzma) as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    import lzma\n'
+            'else:\n'
+            '    from compression import lzma\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=lzma) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -534,7 +720,12 @@ class CompressionTests(unittest.TestCase):
 
     def test_4_stdio_read_lzma_str(self):
         script = "test.stdio.lzma-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=\"lzma\") as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"lzma\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -544,7 +735,12 @@ class CompressionTests(unittest.TestCase):
 
     def test_4_stdio_read_xz_str(self):
         script = "test.stdio.xz-str.py"
-        src = 'from compression import STDIO, open\nwith open(STDIO, mode="r", compression=\"xz\") as i:\n    l = next(i).strip()\n    assert l == "chr\\t0\\t1"\n'
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"xz\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
         with open(script, "w") as s:
             s.write(src)
         self.files.append(script)
@@ -552,6 +748,44 @@ class CompressionTests(unittest.TestCase):
         self._write_file(infile, "xz")
         subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
 
+    @unittest.skipIf(zstd is None,"zstd module not available")
+    def test_4_stdio_read_zstd_bare(self):
+        script = "test.stdio.zstd-bare.py"
+        src = (
+            'import sys\n'
+            'if sys.version_info[:2] < (3,14):\n'
+            '    from backports import zstd\n'
+            'else:\n'
+            '    from compression import zstd\n'
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=zstd) as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.zstd-bare.bed"
+        self._write_file(infile, zstd)
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+
+    @unittest.skipIf(zstd is None,"zstd module not available")
+    def test_4_stdio_read_lzma_str(self):
+        script = "test.stdio.zstd-str.py"
+        src = (
+            'from compressio import STDIO, open\n'
+            'with open(STDIO, mode="r", compression=\"zstd\") as i:\n'
+            '    l = next(i).strip()\n'
+            '    assert l == "chr\\t0\\t1"\n'
+        )
+        with open(script, "w") as s:
+            s.write(src)
+        self.files.append(script)
+        infile = "test.stdio.zstd-str.bed"
+        self._write_file(infile, "zstd")
+        subprocess.run("{CAT} {infile} | {PY3} {script}".format(PY3=PY3,CAT=CAT,script=script,infile=infile), shell=True, check=True)
+        
+        
 
 class TestCompressionUtils(unittest.TestCase):
     def test_is_stream_true(self):

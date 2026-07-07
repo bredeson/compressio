@@ -4,7 +4,7 @@ INSTALL_PATH ?= $(PREFIX)/lib/$(PYTHON_VERSION)/site-packages
 
 CURR_PATH   := $(shell pwd)
 
-PACKAGE    := compression
+PACKAGE    := compressio
 LICENSE    := LICENSE
 SRC_PATH   := $(CURR_PATH)/src
 BUILD_PATH := $(CURR_PATH)/build

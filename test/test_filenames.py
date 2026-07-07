@@ -1,9 +1,9 @@
 
 import unittest
-import compression
+import compressio
 
-from compression.filenames import split_suffix, strip_suffix, infer_compression_format_by_suffix
-from compression.constants import COMPRESSION_SUFFIX
+from compressio.filenames import split_suffix, strip_suffix, infer_compression_format_by_suffix
+from compressio.constants import COMPRESSION_SUFFIX
 
 
 
@@ -69,9 +69,9 @@ class TestFilenames(unittest.TestCase):
     def test_infer_compression_format_by_suffix_string(self):
         for fmt, suffixes in COMPRESSION_SUFFIX.items():
             if fmt == 'bgzip':
-                compression.set_preferred_gz_api('bgzip')
+                compressio.set_preferred_gz_api('bgzip')
             else:
-                compression.set_preferred_gz_api('gzip')
+                compressio.set_preferred_gz_api('gzip')
             for suf in suffixes:
                 fname = 'test' + suf
                 self.assertEqual(infer_compression_format_by_suffix(fname), fmt)
@@ -79,9 +79,9 @@ class TestFilenames(unittest.TestCase):
     def test_infer_compression_format_by_suffix_bytes(self):
         for fmt, suffixes in COMPRESSION_SUFFIX.items():
             if fmt == 'bgzip':
-                compression.set_preferred_gz_api('bgzip')
+                compressio.set_preferred_gz_api('bgzip')
             else:
-                compression.set_preferred_gz_api('gzip')
+                compressio.set_preferred_gz_api('gzip')
             for suf in suffixes:
                 fname = ('test' + suf).encode()
                 self.assertEqual(infer_compression_format_by_suffix(fname), fmt)

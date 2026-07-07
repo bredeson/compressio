@@ -14,6 +14,8 @@ COMPRESSION_SUFFIX = {
     'zstd'  : ('.zst',),
 }
 
+# snappy? lz4?
+# zlib covered by gzip
 COMPRESSION_NAME_MAP = {
     'lzma'    : 'lzma',
     'xz'      : 'lzma',

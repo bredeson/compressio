@@ -112,14 +112,23 @@ def import_compression_module(module):
                             "(multistream may not be supported)"
                         )
                         import bz2 as module_object
-                else:
+                elif _PYTHON_VERSION < (3,14):
                     import bz2 as module_object
+                else:
+                    from compression import bz2 as module_object
 
+            elif COMPRESSION_NAME_MAP[module] == 'gzip':
+                if _PYTHON_VERSION < (3,14):
+                    import gzip as module_object
+                else:
+                    from compression import gzip as module_object
+                    
             elif COMPRESSION_NAME_MAP[module] == 'zip':
                 # use the package-local zipfile shunt implemented in
                 # compression/zipfile.py so the package can open a member
                 # inside a .zip archive transparently.
                 from . import zipfile as module_object
+                
             elif COMPRESSION_NAME_MAP[module] == 'zstd':
                 if _PYTHON_VERSION < (3,14):
                     from backports import zstd as module_object
@@ -290,5 +299,5 @@ def open(filename, mode='rt', compresslevel=0, encoding=None, errors=None, newli
     return compression.open(filename, **options)
 
 
-#TODO: add zipfile (https://docs.python.org/3/library/zipfile.html) support
+#TODO: add snappy and lz4 support
 #TODO: bgzip reader raises UnicodeDecodeError: 'utf-8' codec can't decode bytes in position 8-10: invalid continuation byte
