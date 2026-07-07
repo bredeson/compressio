@@ -1,4 +1,4 @@
-# compression
+# compressio
 
 ## About
 
@@ -23,17 +23,17 @@ For text mode, a compressed stream object is created, then wrapped in an
 behavior, and line ending(s).
 
 To read from/write to compressed streams from stdin/stdout or existing
-file-like objects, the appropriate compression `open()` function object must
-be passed via the `compression` argument (e.g., `compression=gzip.open`). When
+file-like objects, the appropriate compression algorithm name must must
+passed via the `compression` argument (e.g., `compression=gzip`). When
 writing `compresslevel` must be set to a value between 1 and 9, inclusive
 (default is 9).
 
-This module relies on the `io`, `gzip`, `lzma`, `bz2`, `bz2file`, `pysam` and
-`zstd` modules internally, but others can be supplied via the `compression`
-argument, which must return an object with a callable `open()` attribute. The
-`bz2file` module is only required for Python versions earlier than 3.3. The
-`zstd` module is availble via the `backports` module prior to Python 3.14 and
-the `compression` module thereafter.
+This module relies on the `io`, `gzip`, `lzma`, `bz2`, (optionally) `bz2file`, 
+`pysam` and `zstd` modules internally, but others can be supplied via the 
+`compression` argument, which must return an object with a callable `open()` 
+method. The `bz2file` module is only required for Python versions earlier 
+than 3.3. The `zstd` module is availble via the `backports` module prior to
+Python 3.14 and the `compression` module thereafter.
 
 See Also: `help(io.open)`
 
@@ -41,7 +41,7 @@ See Also: `help(io.open)`
 ## Examples
 
 ```python3
-from compression import open
+from compressio import open
 
 # open a file for reading on the local file system
 # (algorithm 'gzip' is automatically detected):
@@ -53,7 +53,7 @@ infile = open("http://path/to/remote/input.fastq.gz")
 # open a file for reading (writing) to STDIN (STDOUT) stream. To read
 # compressed files, must specify the `compression` attribute explicitly.
 # Call one of the supported compression algorithms by name:
-from compression.constants import STDIO
+from compressio.constants import STDIO
 infile = open(STDIO, mode='r', compression='gzip')
 
 # or pass the module object directly:
@@ -66,7 +66,7 @@ outfile = open(STDIO, mode='w', compression=gzip)
 ## Limitations
 The `bgzip` compression interface cannot read from (or write to) existing file
 streams, and in such cases `gzip` is used. If this behavior is not desired,
-please open the file stream directly via `compression.open()` using the file
+please open the file stream directly via `compressio.open()` using the file
 name.
 
 Writing to files on remote servers has not been tested.
