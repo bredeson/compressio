@@ -278,7 +278,7 @@ class CompressionTests(unittest.TestCase):
     # ========================================
     
     def test_2_url_none(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.none.bed"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.none.bed"
         try:
             with open(url, mode="r", compression=None) as i:
                 line = next(i).strip()
@@ -288,13 +288,13 @@ class CompressionTests(unittest.TestCase):
 
     @unittest.skipIf(bgzip is None,"bgzip module not available")
     def test_2_url_bgzip(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bgzip.bed.gz"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.bgzip.bed.gz"
         with open(url, mode="r", compression="bgzip") as i:
             line = next(i).strip()
         self.assertEqual(line, BEDLINE)
         
     def test_2_url_bzip2(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.bzip2.bed.bz2"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.bzip2.bed.bz2"
         try:
             with open(url, mode="r", compression="bz2") as i:
                 line = next(i).strip()
@@ -303,7 +303,7 @@ class CompressionTests(unittest.TestCase):
         self.assertEqual(line, BEDLINE)
 
     def test_2_url_gzip(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.gzip.bed.gz"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.gzip.bed.gz"
         try:
             with open(url, mode="r", compression="gzip") as i:
                 line = next(i).strip()
@@ -312,7 +312,7 @@ class CompressionTests(unittest.TestCase):
         self.assertEqual(line, BEDLINE)
 
     def test_2_url_io(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.io.bed"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.io.bed"
         try:
             with open(url, mode="r", compression="io") as i:
                 line = next(i).strip()
@@ -321,7 +321,7 @@ class CompressionTests(unittest.TestCase):
         self.assertEqual(line, BEDLINE)
         
     def test_2_url_lzma(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.lzma.bed.xz"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.lzma.bed.xz"
         try:
             with open(url, mode="r", compression="lzma") as i:
                 line = next(i).strip()
@@ -330,7 +330,7 @@ class CompressionTests(unittest.TestCase):
         self.assertEqual(line, BEDLINE)
 
     def test_2_url_xz(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.xz.bed.xz"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.xz.bed.xz"
         try:
             with open(url, mode="r", compression="xz") as i:
                 line = next(i).strip()
@@ -340,7 +340,7 @@ class CompressionTests(unittest.TestCase):
 
     @unittest.skipIf(zstd is None,"zstd module not available")
     def test_2_url_zstd(self):
-        url = "https://raw.githubusercontent.com/bredeson/compression/refs/heads/main/test/test.zstd.bed.zst"
+        url = "https://raw.githubusercontent.com/bredeson/compressio/refs/heads/main/test/test.zstd.bed.zst"
         with open(url, mode="r", compression="zstd") as i:
             line = next(i).strip()
         self.assertEqual(line, BEDLINE)
