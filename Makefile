@@ -89,7 +89,7 @@ $(BGZ_INSTALL_PATH):
 
 
 test: $(COMPRESSIO_BUILD_TARGETS) $(BGZ_BUILD_TARGETS)
-	PYTHONPATH="$(LIB_PATH)" $(PYTHON) -m unittest discover -v $(TEST_PATH)
+	PYTHONPATH="$(LIB_PATH)" $(PYTHON) -m unittest discover --verbose --failfast --start-directory $(TEST_PATH)
 
 
 
